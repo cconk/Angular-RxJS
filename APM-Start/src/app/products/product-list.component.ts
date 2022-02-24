@@ -1,41 +1,71 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 
-import { Subscription } from 'rxjs';
+import { BehaviorSubject, combineLatest, EMPTY, Observable, of, Subject, Subscription } from 'rxjs';
+import { catchError, map, startWith } from 'rxjs/operators';
 
 import { Product } from './product';
 import { ProductService } from './product.service';
+import { ProductCategoryService } from '../product-categories/product-category.service';
 
 @Component({
   templateUrl: './product-list.component.html',
-  styleUrls: ['./product-list.component.css']
+  styleUrls: ['./product-list.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class ProductListComponent implements OnInit, OnDestroy {
+export class ProductListComponent {
   pageTitle = 'Product List';
-  errorMessage = '';
-  categories;
+  errorMessageSubject = new Subject<string>();
+  errorMessage = this.errorMessageSubject.asObservable();
 
-  products: Product[] = [];
-  sub: Subscription;
+  private categorySelectedSubject = new BehaviorSubject<number>(0);
+  categorySelectedAction = this.categorySelectedSubject.asObservable();
 
-  constructor(private productService: ProductService) { }
+  products = combineLatest([
+    this.productService.productsWithAdd,
+    this.categorySelectedAction
+    ])
+    .pipe(
+      map(([products, selectedCategoryId]) => 
+      products.filter(product =>
+        selectedCategoryId ? product.categoryId === selectedCategoryId: true 
+        )),
+      catchError(err => {
+        this.errorMessage = err;
+        return EMPTY;
+      })
+    );
+  
+  
+  categories = this.productCategoryService.productCategories
+      .pipe(
+        catchError(err => {
+          this.errorMessage = err;
+          return EMPTY;
+        })
+      )
 
-  ngOnInit(): void {
-    this.sub = this.productService.getProducts()
-      .subscribe(
-        products => this.products = products,
-        error => this.errorMessage = error
-      );
-  }
+  constructor(private productService: ProductService, private productCategoryService: ProductCategoryService) { }
 
-  ngOnDestroy(): void {
-    this.sub.unsubscribe();
-  }
+  // ngOnInit(): void {
+  //   this.products = this.productService.getProducts()
+      
+  //   // this.sub = this.productService.getProducts()
+  //   //   .subscribe(
+  //   //     products => this.products = products,
+  //   //     error => this.errorMessage = error
+  //   //   );
+  // }
+
+  // ngOnDestroy(): void {
+  //   this.sub.unsubscribe();
+  // }
 
   onAdd(): void {
+    this.productService.addProduct();
     console.log('Not yet implemented');
   }
 
   onSelected(categoryId: string): void {
-    console.log('Not yet implemented');
+    this.categorySelectedSubject.next(+categoryId);
   }
 }
